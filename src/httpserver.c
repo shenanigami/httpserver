@@ -1,6 +1,7 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <sys/stat.h>
+#include <sys/wait.h>
 #include <string.h>
 #include <signal.h>
 #include <errno.h>
@@ -28,6 +29,18 @@ bool is_html(char* path) {
             strcmp(file_extension, ".htm") == 0;
 
 }
+
+// source: https://web.stanford.edu/class/archive/cs/cs110/cs110.1196/static/lectures/07-Signals/lecture-07-signals.pdf
+static void reapChild(int unused) {
+
+    while(true) {
+        // WNOHANG allows to return without blocking even if there are more 
+        // children still running
+        pid_t pid = waitpid(-1, NULL, WNOHANG);
+        if (pid <= 0) break;
+
+    }
+} 
 
 // runs forever until SIG_INT
 void server_start(int* socket_number, void (* request_handler)(int), int* server_port,
@@ -80,7 +93,18 @@ void server_start(int* socket_number, void (* request_handler)(int), int* server
         printf("Accepted connection from %s on port %d\n", inet_ntoa(client_address.sin_addr),
                 client_address.sin_port);
         // TODO: the fork thingy
-        request_handler(client_socket_number);
+        signal(SIGCHLD, reapChild);
+        
+        if (fork() == 0) {              // This is the child process
+            close(*socket_number);      // child doesn't need the listener
+            request_handler(client_socket_number);
+            exit(EXIT_SUCCESS);
+        } else {
+
+            close(client_socket_number);
+        }
+
+        //request_handler(client_socket_number);
 
     }
     shutdown(*socket_number, SHUT_RDWR);
